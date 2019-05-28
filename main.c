@@ -45,35 +45,18 @@ int checkBoxStorage(void);
 void mapPrinter(void);
 void playerFinder(void);
 
-//gotoxy(x,y) clear() defined
-#ifdef _WIN32
-//define something for Windows (32-bit and 64-bit, this part is common)
-#include <Windows.h>
-void gotoxy(int x, int y) {
-	COORD pos = { x,y };
-	SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), pos);
-}
-void clear(void) {
-	system("cls");
-}
-#elif __linux__
-// linux
 void gotoxy(int x, int y)
 {
-	//printf("\033[%d;%df", y, x);
-	printf("\033[%dd\033[%dG", y, x);
-	//fflush(stdout);
+	printf("\033[%dd\033[%dG", y, x + 1);
 }
 void clear()
 {
 	printf("\033[H\033[J");
-	system("clear");
 }
-
-#endif
 
 int main(void)
 {
+	clear();
 	printf("Start. . . .\n");
 	nameInput();
 	clear();
