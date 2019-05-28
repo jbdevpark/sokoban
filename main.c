@@ -1,6 +1,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define MAX 30
@@ -20,6 +21,9 @@
 
 #define MAP_PRINT_X 0
 #define MAP_PRINT_Y (HELLO_PRINT_Y + 5)
+
+#define PLAYER_PRINT_X (MAP_PRINT_X + 2 * playerX)
+#define PLAYER_PRINT_Y (MAP_PRINT_Y + playerY)
 
 #define COMMAND_PRINT_X 0
 #define COMMAND_PRINT_Y (mapY + MAP_PRINT_Y + 1)
@@ -54,29 +58,18 @@ void clear(void) {
 }
 #elif __linux__
 // linux
-#include <unistd.h>
-#include <termio.h>
-int getch(void)
+void gotoxy(int x, int y)
 {
-	int c;
-	struct termios oldattr, newattr;
-	tcgetattr(STDIN_FILENO, &oldattr);           // 현재 터미널 설정 읽음
-	newattr = oldattr;
-	newattr.c_lflag &= ~(ICANON | ECHO);         // CANONICAL과 ECHO 끔
-	newattr.c_cc[VMIN] = 1;                      // 최소 입력 문자 수를 1로 설정
-	newattr.c_cc[VTIME] = 0;                     // 최소 읽기 대기 시간을 0으로 설정
-	tcsetattr(STDIN_FILENO, TCSANOW, &newattr);  // 터미널에 설정 입력
-	c = getchar();                               // 키보드 입력 읽음
-	tcsetattr(STDIN_FILENO, TCSANOW, &oldattr);  // 원래의 설정으로 복구
-	return c;
+	//printf("\033[%d;%df", y, x);
+	printf("\033[%dd\033[%dG", y, x);
+	//fflush(stdout);
 }
-void gotoxy(int x, int y) {
-	printf("\033[%d;%df", y, x);
-	fflush(stdout);
-}
-void clear() {
+void clear()
+{
 	printf("\033[H\033[J");
+	system("clear");
 }
+
 #endif
 
 int main(void)
@@ -126,15 +119,50 @@ int main(void)
 				{
 				case 'h':	case 'H':	//left
 					//do something
+					if (map[playerY][playerX - 1] == '.')
+					{
+						gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+						printf(" ");
+						playerX--;
+					}
+					gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+					printf("@");
 					break;
+
 				case 'j':	case 'J':	//down
 					//do something
+					if (map[playerY + 1][playerX] == '.')
+					{
+						gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+						printf(" ");
+						playerY++;
+					}
+					gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+					printf("@");
 					break;
+
 				case 'k':	case 'K':	//up
 					//do something
+					if (map[playerY - 1][playerX] == '.')
+					{
+						gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+						printf(" ");
+						playerY--;
+					}
+					gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+					printf("@");
 					break;
+
 				case 'l':	case 'L':	//right
 					//do something
+					if (map[playerY][playerX + 1] == '.')
+					{
+						gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+						printf(" ");
+						playerX++;
+					}
+					gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+					printf("@");
 					break;
 
 				case 'u':	case 'U':	//undo
