@@ -33,6 +33,7 @@
 
 char name[STR_MAX];
 int record[STAGE_NUM];
+int stage;
 int mapX, mapY;
 int playerX, playerY;
 char map[MAX][MAX];
@@ -40,8 +41,13 @@ char map[MAX][MAX];
 void nameInput(void);
 void mapMaker(int stage);
 int checkBoxStorage(void);
+
+int printStage(int stage);
+
 void mapPrinter(void);
 void playerFinder(void);
+
+void moveplayer(int xplus, int yplus);
 void move(int xplus, int yplus);
 
 void gotoxy(int x, int y)
@@ -60,28 +66,11 @@ int main(void)
 	nameInput();
 	clear();
 	
-	for(int stage = 1;stage <= STAGE_NUM;stage++)
+	for(stage = 1;stage <= STAGE_NUM;stage++)
 	{
-		gotoxy(HELLO_PRINT_X, HELLO_PRINT_Y);
-		printf("\tHello %s", name);
-		gotoxy(STATUS_PRINT_X, STATUS_PRINT_Y);
-		printf("Stage %d", stage);
-		
-		mapMaker(stage);
-		if (!checkBoxStorage())
-		{
-			printf("\n\n박스와 보관장소 개수가 다릅니다. 프로그램을 종료합니다.\n");
-			return 0;
-		}
-
-		mapPrinter();
-		playerFinder();
+		if (!printStage(stage))	return 0;
 
 		char run = TRUE;
-
-		gotoxy(COMMAND_PRINT_X, COMMAND_PRINT_Y);
-		printf("(Command) ");
-
 		while (run)
 		{
 			char commandArr[STR_MAX] = { 0 };
@@ -96,47 +85,61 @@ int main(void)
 				if (commandArr[i] != ' ')	command = commandArr[i];
 				else continue;
 
-				int xplus = 0, yplus = 0;
 				switch (command)
 				{
-				case 'h':	case 'H':	//left
+					//left
+				case 'h':	case 'H':
 					move(-1, 0);
-					record[stage - 1]++;
 					break;
-				case 'j':	case 'J':	//down
+					
+					//down
+				case 'j':	case 'J':
 					move(0, 1);
-					record[stage - 1]++;
 					break;
-				case 'k':	case 'K':	//up
+
+					//up
+				case 'k':	case 'K':
 					move(0, -1);
-					record[stage - 1]++;
 					break;
-				case 'l':	case 'L':	//right
+
+					//right
+				case 'l':	case 'L':
 					move(1, 0);
-					record[stage - 1]++;
 					break;
 
 				case 'u':	case 'U':	//undo
 					//do something
 					break;
-				case 'r':	case 'R':	//replay 현재 맵을 다시시작
+
+				case 'r':	case 'R':	//replay 현재 맵을 다시시작 (움직임 횟수 유지)
 					//do something
+					if (!printStage(stage))	return 0;
 					break;
-				case 'n':	case 'N':	//new 1번째 맵부터 다시시작
+
+				case 'n':	case 'N':	//new 1번째 맵부터 다시시작 (움직임 횟수 삭제)
 					//do something
+					for (int i = 0; i < STAGE_NUM; i++)	record[i] = 0;
+					stage = 1;
+					if (!printStage(stage))	return 0;
 					break;
+
 				case 'e':	case 'E':	//exit 게임 종료
-					//do something
-					break;
+					clear();
+					printf("SEE YOU %s. . . . \n", name);
+
 				case 's':	case 'S':	//save 현재 상태 저장
 					//do something
+					if (command == 'e' || command == 'E')	return 0;
 					break;
+
 				case 'f':	case 'F':	//save파일 시점부터 게임진행
 					//do something
 					break;
+
 				case 'd':	case 'D':	//display help
 					//do something
 					break;
+
 				case 't':	case 'T':	//top 게임 순위 보여줌
 					//do something
 					break;
@@ -231,6 +234,29 @@ int checkBoxStorage(void)
 	if (cntBox != cntStorage)	return 0;
 	else return 1;
 }
+
+int printStage(int stage)
+{
+	gotoxy(HELLO_PRINT_X, HELLO_PRINT_Y);
+	printf("\tHello %s", name);
+	gotoxy(STATUS_PRINT_X, STATUS_PRINT_Y);
+	printf("Stage %d", stage);
+
+	mapMaker(stage);
+	if (!checkBoxStorage())
+	{
+		printf("\n\n박스와 보관장소 개수가 다릅니다. 프로그램을 종료합니다.\n");
+		return 0;
+	}
+
+	mapPrinter();
+	playerFinder();
+
+	gotoxy(COMMAND_PRINT_X, COMMAND_PRINT_Y);
+	printf("(Command) ");
+
+	return 1;
+}
 void mapPrinter(void)
 {
 	gotoxy(MAP_PRINT_X, MAP_PRINT_Y);
@@ -261,51 +287,38 @@ void playerFinder(void)
 	}
 }
 
+void moveplayer(int xplus, int yplus)
+{
+	gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+	printf(" ");
+	map[playerY][playerX] = '.';
+	playerX += xplus;
+	playerY += yplus;
+
+	gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+	printf("@");
+	map[playerY][playerX] = '@';
+
+	record[stage - 1]++;
+}
 void move(int xplus, int yplus)
 {
 	if (playerX + xplus >= 0 && playerY + yplus >= 0 && playerX + xplus < mapX && playerY + yplus < mapY)
 	{
-		if (map[playerY + yplus][playerX + xplus] == '.')
-		{
-			gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-			printf(" ");
-			map[playerY][playerX] = '.';
-			playerX += xplus;
-			playerY += yplus;
-
-			gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-			printf("@");
-			map[playerY][playerX] = '@';
-		}
+		if (map[playerY + yplus][playerX + xplus] == '.')	moveplayer(xplus, yplus);
 		else if (map[playerY + yplus][playerX + xplus] == '$' && map[playerY + 2 * yplus][playerX + 2 * xplus] == '.'
 			&& playerX + 2 * xplus >= 0 && playerY + 2 * yplus >= 0 && playerX + 2 * xplus < mapX && playerY + 2 * yplus < mapY)
 		{
-			gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-			printf(" ");
-			map[playerY][playerX] = '.';
-			playerX += xplus;
-			playerY += yplus;
-
-			gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-			printf("@");
-			map[playerY][playerX] = '@';
+			moveplayer(xplus, yplus);
 
 			gotoxy(PLAYER_PRINT_X + 2 * xplus, PLAYER_PRINT_Y + yplus);
 			printf("$");
 			map[playerY + yplus][playerX + xplus] = '$';
 		}
 		else if (map[playerY + yplus][playerX + xplus] == '$' && map[playerY + 2 * yplus][playerX + 2 * xplus] == 'O'
-			&& playerX + 2 * xplus >= 0 && playerY + 2 * yplus >= 0 && playerX + 2 * xplus < mapX && playerY + 2 * yplus < map)
+			&& playerX + 2 * xplus >= 0 && playerY + 2 * yplus >= 0 && playerX + 2 * xplus < mapX && playerY + 2 * yplus < mapY)
 		{
-			gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-			printf(" ");
-			map[playerY][playerX] = '.';
-			playerX += xplus;
-			playerY += yplus;
-
-			gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-			printf("@");
-			map[playerY][playerX] = '@';
+			moveplayer(xplus, yplus);
 
 			gotoxy(PLAYER_PRINT_X + 2 * xplus, PLAYER_PRINT_Y + yplus);
 			printf("$");
@@ -315,15 +328,7 @@ void move(int xplus, int yplus)
 		}
 		else if (map[playerY + yplus][playerX + xplus] == 'O')
 		{
-			gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-			printf(" ");
-			map[playerY][playerX] = '.';
-			playerX += xplus;
-			playerY += yplus;
-
-			gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-			printf("@");
-			map[playerY][playerX] = '@';
+			moveplayer(xplus, yplus);
 
 			//print O as remaining
 		}
