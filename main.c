@@ -50,6 +50,8 @@ int stage;
 int mapX, mapY;
 int playerX, playerY;
 char map[MAX][MAX];
+char mapGoal[MAX][2];
+int mapGoalCnt = 0;
 
 int remainUndo = UNDO_INIT;
 
@@ -63,6 +65,7 @@ void printStage(int stage);
 
 void mapPrinter(void);
 void playerFinder(void);
+void goalFinder(void);
 
 void moveplayer(int xplus, int yplus);
 int move(int xplus, int yplus);
@@ -82,6 +85,7 @@ void clear()
 int main(void)
 {
 	FILE* save;
+	FILE* rank;
 	clear();
 	printf("Start. . . .\n");
 	nameInput();
@@ -107,6 +111,8 @@ int main(void)
 				if (commandArr[i] != ' ')	command = commandArr[i];
 				else continue;
 
+				mapPrinter();
+
 				switch (command)
 				{
 					//left
@@ -130,6 +136,11 @@ int main(void)
 					break;
 
 				case 'u':	case 'U':	//undo
+
+					/////////////////////////////////////////////////
+					//BBBBBBBBBBBBBBBUUUUUUUUUUUUUUUUUGGGGGGGGGGGGGGG
+					/////////////////////////////////////////////////
+
 					if (remainUndo > 0 && record[stage - 1] > 0)
 					{
 						remainUndo--;
@@ -151,12 +162,10 @@ int main(void)
 					break;
 
 				case 'r':	case 'R':	//replay 현재 맵을 다시시작 (움직임 횟수 유지)
-					//do something
 					if (!printNewStage(stage))	return 0;
 					break;
 
 				case 'n':	case 'N':	//new 1번째 맵부터 다시시작 (움직임 횟수 삭제)
-					//do something
 					for (int i = 0; i < STAGE_NUM; i++)	record[i] = 0;
 					stage = 1;
 					if (!printNewStage(stage))	return 0;
@@ -167,7 +176,6 @@ int main(void)
 					printf("SEE YOU %s. . . . \n", name);
 
 				case 's':	case 'S':	//save 현재 상태 저장
-					//do something
 					save = fopen("sokoban.txt", "w");
 
 					//Line 1: NAME
@@ -256,9 +264,20 @@ int main(void)
 
 				default:
 					//do something
+					gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
+					printf("존재하지 않는 명령어입니다");
 					break;
 				}
 				statPrint();
+			}
+
+			for (int i = 0; i < mapGoalCnt; i++)
+			{
+				if (map[mapGoal[i][1]][mapGoal[i][0]] != '@' && map[mapGoal[i][1]][mapGoal[i][0]] != '$')
+				{
+					gotoxy(MAP_PRINT_X + 2 * mapGoal[i][0], MAP_PRINT_Y + mapGoal[i][1]);
+					printf("O");
+				}
 			}
 
 			//clear
@@ -370,6 +389,7 @@ int printNewStage(int stage)
 
 	mapPrinter();
 	playerFinder();
+	goalFinder();
 
 	gotoxy(COMMAND_PRINT_X, COMMAND_PRINT_Y);
 	printf("(Command) ");
@@ -421,7 +441,21 @@ void playerFinder(void)
 		}
 	}
 }
-
+void goalFinder(void)
+{
+	for (int i = 0; i < mapX; i++)
+	{
+		for (int j = 0; j < mapY; j++)
+		{
+			if (map[j][i] == 'O')
+			{
+				mapGoal[mapGoalCnt][0] = i;
+				mapGoal[mapGoalCnt][1] = j;
+				mapGoalCnt++;
+			}
+		}
+	}
+}
 void moveplayer(int xplus, int yplus)
 {
 	gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
@@ -430,11 +464,28 @@ void moveplayer(int xplus, int yplus)
 	playerX += xplus;
 	playerY += yplus;
 
+	gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+	printf("@");
+	map[playerY][playerX] = '@';
 
+	record[stage - 1]++;
+}
+void movePlayerBox(int xplus, int yplus)
+{
+	gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+	printf(" ");
+	map[playerY][playerX] = '.';
+
+	playerX += xplus;
+	playerY += yplus;
 
 	gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
 	printf("@");
 	map[playerY][playerX] = '@';
+
+	gotoxy(PLAYER_PRINT_X + 2 * xplus, PLAYER_PRINT_Y + yplus);
+	printf("$");
+	map[playerY + yplus][playerX + xplus] = '$';
 
 	record[stage - 1]++;
 }
@@ -446,33 +497,10 @@ int move(int xplus, int yplus)
 	{
 		if (map[playerY + yplus][playerX + xplus] == '.')	moveplayer(xplus, yplus);
 		else if (map[playerY + yplus][playerX + xplus] == '$' && map[playerY + 2 * yplus][playerX + 2 * xplus] == '.'
-			&& playerX + 2 * xplus >= 0 && playerY + 2 * yplus >= 0 && playerX + 2 * xplus < mapX && playerY + 2 * yplus < mapY)
-		{
-			moveplayer(xplus, yplus);
-
-			gotoxy(PLAYER_PRINT_X + 2 * xplus, PLAYER_PRINT_Y + yplus);
-			printf("$");
-			map[playerY + yplus][playerX + xplus] = '$';
-		}
+			&& playerX + 2 * xplus >= 0 && playerY + 2 * yplus >= 0 && playerX + 2 * xplus < mapX && playerY + 2 * yplus < mapY)	movePlayerBox(xplus, yplus);
 		else if (map[playerY + yplus][playerX + xplus] == '$' && map[playerY + 2 * yplus][playerX + 2 * xplus] == 'O'
-			&& playerX + 2 * xplus >= 0 && playerY + 2 * yplus >= 0 && playerX + 2 * xplus < mapX && playerY + 2 * yplus < mapY)
-		{
-			moveplayer(xplus, yplus);
-
-			gotoxy(PLAYER_PRINT_X + 2 * xplus, PLAYER_PRINT_Y + yplus);
-			printf("$");
-			map[playerY + yplus][playerX + xplus] = '$';
-
-			//print O as remaining
-			//do something
-		}
-		else if (map[playerY + yplus][playerX + xplus] == 'O')
-		{
-			moveplayer(xplus, yplus);
-
-			//print O as remaining
-			//do something
-		}
+			&& playerX + 2 * xplus >= 0 && playerY + 2 * yplus >= 0 && playerX + 2 * xplus < mapX && playerY + 2 * yplus < mapY)	movePlayerBox(xplus, yplus);
+		else if (map[playerY + yplus][playerX + xplus] == 'O')	moveplayer(xplus, yplus);
 	}
 
 	if (bef_playerX != playerX || bef_playerY != playerY)	return 1;
@@ -507,11 +535,18 @@ void loadMove(int repeat)
 		}
 	}
 }
-
 int success(int stage)
 {
 	//returns 1 when succeed
 	//else returns 0
+	int cnt = 0;
+	for (int i = 0; i < mapGoalCnt; i++)
+	{
+		if (map[mapGoal[i][1]][mapGoal[i][0]] == '$')	cnt++;
+	}
+
+	if (cnt == mapGoalCnt)	return 1;
+	else return 0;
 
 	//do something
 }
