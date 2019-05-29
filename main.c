@@ -31,6 +31,9 @@
 #define COMMAND_SCAN_X 10
 #define COMMAND_SCAN_Y (mapY + MAP_PRINT_Y + 1)
 
+#define DISHELP_PRINT_X 0
+#define DISHELP_PRINT_Y COMMAND_PRINT_Y + 2
+
 char name[STR_MAX];
 int record[STAGE_NUM];
 int stage;
@@ -42,7 +45,8 @@ void nameInput(void);
 void mapMaker(int stage);
 int checkBoxStorage(void);
 
-int printStage(int stage);
+int printNewStage(int stage);
+void printStage(int stage);
 
 void mapPrinter(void);
 void playerFinder(void);
@@ -68,9 +72,10 @@ int main(void)
 	
 	for(stage = 1;stage <= STAGE_NUM;stage++)
 	{
-		if (!printStage(stage))	return 0;
+		if (!printNewStage(stage))	return 0;
 
 		char run = TRUE;
+		char disHelp = FALSE;
 		while (run)
 		{
 			char commandArr[STR_MAX] = { 0 };
@@ -113,14 +118,14 @@ int main(void)
 
 				case 'r':	case 'R':	//replay 현재 맵을 다시시작 (움직임 횟수 유지)
 					//do something
-					if (!printStage(stage))	return 0;
+					if (!printNewStage(stage))	return 0;
 					break;
 
 				case 'n':	case 'N':	//new 1번째 맵부터 다시시작 (움직임 횟수 삭제)
 					//do something
 					for (int i = 0; i < STAGE_NUM; i++)	record[i] = 0;
 					stage = 1;
-					if (!printStage(stage))	return 0;
+					if (!printNewStage(stage))	return 0;
 					break;
 
 				case 'e':	case 'E':	//exit 게임 종료
@@ -138,6 +143,28 @@ int main(void)
 
 				case 'd':	case 'D':	//display help
 					//do something
+					if (disHelp == FALSE)
+					{
+						disHelp = TRUE;
+						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 0);	printf("%10s : 왼쪽", "h");
+						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 1);	printf("%10s : 아래쪽", "j");
+						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 2);	printf("%10s : 위쪽", "k");
+						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 3);	printf("%10s : 오른쪽", "l");
+						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 4);	printf("%10s : Undo (최대 5번)", "u");
+						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 5);	printf("%10s : Replay 현재 맵을 처음부터 다시 시작 (움직임 횟수는 유지)", "r");
+						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 6);	printf("%10s : New 첫번째 맵부터 다시 시작 (움직임 횟수 기록 삭제)", "n");
+						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 7);	printf("%10s : Exit 저장 & 게임 종료", "e");
+						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 8);	printf("%10s : Save 현재 상태 파일에 저장", "s");
+						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 9);	printf("%10s : File Load 저장된 파일의 시점부터 다시 시작", "f");
+						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 10);	printf("%10s : 명령 내용 보여줌", "d");
+						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 11);	printf("%10s : 게임 순위 보여줌", "t");
+					}
+					else
+					{
+						disHelp = FALSE;
+						printStage(stage);
+					}
+
 					break;
 
 				case 't':	case 'T':	//top 게임 순위 보여줌
@@ -235,8 +262,9 @@ int checkBoxStorage(void)
 	else return 1;
 }
 
-int printStage(int stage)
+int printNewStage(int stage)
 {
+	clear();
 	gotoxy(HELLO_PRINT_X, HELLO_PRINT_Y);
 	printf("\tHello %s", name);
 	gotoxy(STATUS_PRINT_X, STATUS_PRINT_Y);
@@ -256,6 +284,19 @@ int printStage(int stage)
 	printf("(Command) ");
 
 	return 1;
+}
+void printStage(int stage)
+{
+	clear();
+	gotoxy(HELLO_PRINT_X, HELLO_PRINT_Y);
+	printf("\tHello %s", name);
+	gotoxy(STATUS_PRINT_X, STATUS_PRINT_Y);
+	printf("Stage %d", stage);
+
+	mapPrinter();
+
+	gotoxy(COMMAND_PRINT_X, COMMAND_PRINT_Y);
+	printf("(Command) ");
 }
 void mapPrinter(void)
 {
