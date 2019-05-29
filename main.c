@@ -33,10 +33,8 @@
 
 char name[STR_MAX];
 int record[STAGE_NUM];
-
 int mapX, mapY;
 int playerX, playerY;
-
 char map[MAX][MAX];
 
 void nameInput(void);
@@ -44,6 +42,7 @@ void mapMaker(int stage);
 int checkBoxStorage(void);
 void mapPrinter(void);
 void playerFinder(void);
+void move(int xplus, int yplus);
 
 void gotoxy(int x, int y)
 {
@@ -61,15 +60,14 @@ int main(void)
 	nameInput();
 	clear();
 	
-	for(int i = 0;i < STAGE_NUM;i++)
+	for(int stage = 1;stage <= STAGE_NUM;stage++)
 	{
 		gotoxy(HELLO_PRINT_X, HELLO_PRINT_Y);
 		printf("\tHello %s", name);
 		gotoxy(STATUS_PRINT_X, STATUS_PRINT_Y);
-		printf("Stage %d", i + 1);
-
+		printf("Stage %d", stage);
 		
-		mapMaker(i + 1);
+		mapMaker(stage);
 		if (!checkBoxStorage())
 		{
 			printf("\n\n박스와 보관장소 개수가 다릅니다. 프로그램을 종료합니다.\n");
@@ -98,54 +96,24 @@ int main(void)
 				if (commandArr[i] != ' ')	command = commandArr[i];
 				else continue;
 
+				int xplus = 0, yplus = 0;
 				switch (command)
 				{
 				case 'h':	case 'H':	//left
-					//do something
-					if (map[playerY][playerX - 1] == '.')
-					{
-						gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-						printf(" ");
-						playerX--;
-					}
-					gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-					printf("@");
+					move(-1, 0);
+					record[stage - 1]++;
 					break;
-
 				case 'j':	case 'J':	//down
-					//do something
-					if (map[playerY + 1][playerX] == '.')
-					{
-						gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-						printf(" ");
-						playerY++;
-					}
-					gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-					printf("@");
+					move(0, 1);
+					record[stage - 1]++;
 					break;
-
 				case 'k':	case 'K':	//up
-					//do something
-					if (map[playerY - 1][playerX] == '.')
-					{
-						gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-						printf(" ");
-						playerY--;
-					}
-					gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-					printf("@");
+					move(0, -1);
+					record[stage - 1]++;
 					break;
-
 				case 'l':	case 'L':	//right
-					//do something
-					if (map[playerY][playerX + 1] == '.')
-					{
-						gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-						printf(" ");
-						playerX++;
-					}
-					gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-					printf("@");
+					move(1, 0);
+					record[stage - 1]++;
 					break;
 
 				case 'u':	case 'U':	//undo
@@ -289,6 +257,75 @@ void playerFinder(void)
 				playerX = j;
 				return;
 			}
+		}
+	}
+}
+
+void move(int xplus, int yplus)
+{
+	if (playerX + xplus >= 0 && playerY + yplus >= 0 && playerX + xplus < mapX && playerY + yplus < mapY)
+	{
+		if (map[playerY + yplus][playerX + xplus] == '.')
+		{
+			gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+			printf(" ");
+			map[playerY][playerX] = '.';
+			playerX += xplus;
+			playerY += yplus;
+
+			gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+			printf("@");
+			map[playerY][playerX] = '@';
+		}
+		else if (map[playerY + yplus][playerX + xplus] == '$' && map[playerY + 2 * yplus][playerX + 2 * xplus] == '.'
+			&& playerX + 2 * xplus >= 0 && playerY + 2 * yplus >= 0 && playerX + 2 * xplus < mapX && playerY + 2 * yplus < mapY)
+		{
+			gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+			printf(" ");
+			map[playerY][playerX] = '.';
+			playerX += xplus;
+			playerY += yplus;
+
+			gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+			printf("@");
+			map[playerY][playerX] = '@';
+
+			gotoxy(PLAYER_PRINT_X + 2 * xplus, PLAYER_PRINT_Y + yplus);
+			printf("$");
+			map[playerY + yplus][playerX + xplus] = '$';
+		}
+		else if (map[playerY + yplus][playerX + xplus] == '$' && map[playerY + 2 * yplus][playerX + 2 * xplus] == 'O'
+			&& playerX + 2 * xplus >= 0 && playerY + 2 * yplus >= 0 && playerX + 2 * xplus < mapX && playerY + 2 * yplus < map)
+		{
+			gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+			printf(" ");
+			map[playerY][playerX] = '.';
+			playerX += xplus;
+			playerY += yplus;
+
+			gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+			printf("@");
+			map[playerY][playerX] = '@';
+
+			gotoxy(PLAYER_PRINT_X + 2 * xplus, PLAYER_PRINT_Y + yplus);
+			printf("$");
+			map[playerY + yplus][playerX + xplus] = '$';
+
+			//print O as remaining
+		}
+		else if (map[playerY + yplus][playerX + xplus] == 'O')
+		{
+			gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+			printf(" ");
+			map[playerY][playerX] = '.';
+			playerX += xplus;
+			playerY += yplus;
+
+			gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+			printf("@");
+			map[playerY][playerX] = '@';
+
+			//print O as remaining
 		}
 	}
 }
