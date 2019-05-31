@@ -5,11 +5,12 @@
 #include <string.h>
 
 #define MAX 30
+#define MAX_COMMAND 10
 #define STR_MAX 100
 #define STAGE_NUM 5
 #define MAX_LOG 1000
 
-#define UNDO_INIT 5
+#define UNDO_INIT 99999
 
 #define TRUE 1
 #define FALSE 0
@@ -40,11 +41,48 @@
 #define PROMPT_PRINT_X 0
 #define PROMPT_PRINT_Y (COMMAND_PRINT_Y + 2)
 
+#ifdef _WIN32
+#include <conio.h>
+#define getch() _getch()
+#define getche() _getche()
+#define gets(x) gets_s(x,sizeof(x))
+#elif __linux__
+#include <unistd.h>
+#include <termio.h>
+int getch(void)
+{
+	int c;
+	struct termios oldattr, newattr;
+	tcgetattr(STDIN_FILENO, &oldattr);           // 현재 터미널 설정 읽음
+	newattr = oldattr;
+	newattr.c_lflag &= ~(ICANON | ECHO);         // CANONICAL과 ECHO 끔
+	newattr.c_cc[VMIN] = 1;                      // 최소 입력 문자 수를 1로 설정
+	newattr.c_cc[VTIME] = 0;                     // 최소 읽기 대기 시간을 0으로 설정
+	tcsetattr(STDIN_FILENO, TCSANOW, &newattr);  // 터미널에 설정 입력
+	c = getchar();                               // 키보드 입력 읽음
+	tcsetattr(STDIN_FILENO, TCSANOW, &oldattr);  // 원래의 설정으로 복구
+	return c;
+}
+int getche(void)
+{
+	int c;
+	struct termios oldattr, newattr;
+	tcgetattr(STDIN_FILENO, &oldattr);           // 현재 터미널 설정 읽음
+	newattr = oldattr;
+	newattr.c_lflag &= ~(ICANON);				 // CANONICAL 끔
+	newattr.c_cc[VMIN] = 1;                      // 최소 입력 문자 수를 1로 설정
+	newattr.c_cc[VTIME] = 0;                     // 최소 읽기 대기 시간을 0으로 설정
+	tcsetattr(STDIN_FILENO, TCSANOW, &newattr);  // 터미널에 설정 입력
+	c = getchar();                               // 키보드 입력 읽음
+	tcsetattr(STDIN_FILENO, TCSANOW, &oldattr);  // 원래의 설정으로 복구
+	return c;
+}
+#endif
+
 char name[STR_MAX];
 int record[STAGE_NUM];
 
 char log[STAGE_NUM][MAX_LOG];
-int logcnt = 0;
 
 int stage;
 int mapX, mapY;
@@ -61,15 +99,17 @@ int checkBoxStorage(void);
 
 void statPrint(void);
 int printNewStage(int stage);
-void printStage(int stage);
+void refresh(int stage);
 
+void goalPrinter(void);
 void mapPrinter(void);
 void playerFinder(void);
 void goalFinder(void);
 
-void moveplayer(int xplus, int yplus);
-int move(int xplus, int yplus);
-void loadMove(int repeat);
+void moveplayer(int xplus, int yplus, int reload);
+void movePlayerBox(int xplus, int yplus, int reload);
+int move(int xplus, int yplus, int reload);
+void loadMove(int repeat, int reload);
 
 int success(int stage);
 
@@ -86,7 +126,7 @@ int main(void)
 {
 	FILE* save;
 	FILE* rank;
-	clear();
+	//clear();
 	printf("Start. . . .\n");
 	nameInput();
 	clear();
@@ -97,192 +137,195 @@ int main(void)
 
 		char run = TRUE;
 		char disHelp = FALSE;
+
 		while (run)
 		{
-			char commandArr[STR_MAX] = { 0 };
-			char command;
+			//char commandArr[STR_MAX] = { 0 };
+			int command;
 
-			//input command
+			goalPrinter();
+
 			gotoxy(COMMAND_SCAN_X, COMMAND_SCAN_Y);
-			gets(commandArr);
 
-			for (int i = 0; i < strlen(commandArr); i++)
+			command = getch();
+#ifdef _WIN32
+			//Arrow Control
+#define KEY_UP 72
+#define KEY_LEFT 75
+#define KEY_RIGHT 77
+#define KEY_DOWN 80
+			if (command == 224)
 			{
-				if (commandArr[i] != ' ')	command = commandArr[i];
-				else continue;
-
-				mapPrinter();
-
+				command = getch();
 				switch (command)
 				{
-					//left
-				case 'h':	case 'H':
-					if (move(-1, 0))	log[stage - 1][record[stage - 1] - 1] = 'h';
+				case KEY_UP:
+					command = 'k';
 					break;
-					
-					//down
-				case 'j':	case 'J':
-					if (move(0, 1))	log[stage - 1][record[stage - 1] - 1] = 'j';
+				case KEY_LEFT:
+					command = 'h';
 					break;
-
-					//up
-				case 'k':	case 'K':
-					if (move(0, -1))	log[stage - 1][record[stage - 1] - 1] = 'k';
+				case KEY_RIGHT:
+					command = 'l';
 					break;
-
-					//right
-				case 'l':	case 'L':
-					if (move(1, 0))	log[stage - 1][record[stage - 1] - 1] = 'l';
-					break;
-
-				case 'u':	case 'U':	//undo
-
-					/////////////////////////////////////////////////
-					//BBBBBBBBBBBBBBBUUUUUUUUUUUUUUUUUGGGGGGGGGGGGGGG
-					/////////////////////////////////////////////////
-
-					if (remainUndo > 0 && record[stage - 1] > 0)
-					{
-						remainUndo--;
-						if (!printNewStage(stage))	return 0;
-						loadMove(record[stage - 1] - 1);
-					}
-					else if(remainUndo <= 0)
-					{
-						//prompt
-						gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
-						printf("Undo 기회 모두사용함");
-					}
-					else if (record[stage - 1] <= 0)
-					{
-						gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
-						printf("Nothing to Undo");
-					}
-
-					break;
-
-				case 'r':	case 'R':	//replay 현재 맵을 다시시작 (움직임 횟수 유지)
-					if (!printNewStage(stage))	return 0;
-					break;
-
-				case 'n':	case 'N':	//new 1번째 맵부터 다시시작 (움직임 횟수 삭제)
-					for (int i = 0; i < STAGE_NUM; i++)	record[i] = 0;
-					stage = 1;
-					if (!printNewStage(stage))	return 0;
-					break;
-
-				case 'e':	case 'E':	//exit 게임 종료
-					clear();
-					printf("SEE YOU %s. . . . \n", name);
-
-				case 's':	case 'S':	//save 현재 상태 저장
-					save = fopen("sokoban.txt", "w");
-
-					//Line 1: NAME
-					//Line 2: Current Stage
-					//Line 3: Stage Records
-					//Line 4~STAGE_NUM + 4: Stage Logs
-					//Line STAGE_NUM + 5: remainUndo
-
-					fprintf(save, "%s", name);
-					fprintf(save, "\n");
-					fprintf(save, "%d\n", stage);
-					for (int i = 0; i < STAGE_NUM;i++)	fprintf(save, "%d ", record[i]);
-					fprintf(save, "\n");
-					for (int i = 0; i < STAGE_NUM; i++)
-					{
-						for (int j = 0; j < record[i]; j++)	fprintf(save, "%c", log[i][j]);
-						fprintf(save, "\n");
-					}
-					fprintf(save, "%d\n", remainUndo);
-
-					fclose(save);
-
-					if (command == 'e' || command == 'E')	return 0;
-					break;
-
-				case 'f':	case 'F':	//save파일 시점부터 게임진행
-
-					/////////////////////////////////////////////////
-					//BBBBBBBBBBBBBBBUUUUUUUUUUUUUUUUUGGGGGGGGGGGGGGG
-					/////////////////////////////////////////////////
-					
-					save = fopen("sokoban.txt", "r");
-
-					fgets(name,STR_MAX, save);
-					rewind(save);
-
-					fscanf(save, "%d", &stage);
-					rewind(save);
-
-					for (int i = 0; i < STAGE_NUM; i++)	fscanf(save, "%d", &record[i]);
-					rewind(save);
-
-					for (int i = 0; i < STAGE_NUM; i++)
-					{
-						for (int j = 0; j < record[i]; j++)	fgets(log[i], MAX_LOG, save);
-						rewind(save);
-					}
-					fscanf(save, "%d", &remainUndo);
-
-					printNewStage(stage);
-					loadMove(record[stage - 1]);
-
-					fclose(save);
-
-					break;
-
-				case 'd':	case 'D':	//display help
-					printStage(stage);
-					if (disHelp == FALSE)
-					{
-						disHelp = TRUE;
-						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 0);	printf("%10s : 왼쪽", "h");
-						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 1);	printf("%10s : 아래쪽", "j");
-						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 2);	printf("%10s : 위쪽", "k");
-						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 3);	printf("%10s : 오른쪽", "l");
-						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 4);	printf("%10s : Undo (최대 5번)", "u");
-						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 5);	printf("%10s : Replay 현재 맵을 처음부터 다시 시작 (움직임 횟수는 유지)", "r");
-						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 6);	printf("%10s : New 첫번째 맵부터 다시 시작 (움직임 횟수 기록 삭제)", "n");
-						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 7);	printf("%10s : Exit 저장 & 게임 종료", "e");
-						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 8);	printf("%10s : Save 현재 상태 파일에 저장", "s");
-						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 9);	printf("%10s : File Load 저장된 파일의 시점부터 다시 시작", "f");
-						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 10);	printf("%10s : 명령 내용 보여줌", "d");
-						gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 11);	printf("%10s : 게임 순위 보여줌", "t");
-					}
-					else
-					{
-						disHelp = FALSE;
-						printStage(stage);
-					}
-
-					break;
-
-				case 't':	case 'T':	//top 게임 순위 보여줌
-					//do something
-					break;
-
-				default:
-					//do something
-					gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
-					printf("존재하지 않는 명령어입니다");
+				case KEY_DOWN:
+					command = 'j';
 					break;
 				}
-				statPrint();
 			}
-
-			for (int i = 0; i < mapGoalCnt; i++)
+#endif
+			int topNum = 0;
+			char char_topNum[MAX_COMMAND] = { 0 };
+			if (command == 't' || command == 'T')
 			{
-				if (map[mapGoal[i][1]][mapGoal[i][0]] != '@' && map[mapGoal[i][1]][mapGoal[i][0]] != '$')
-				{
-					gotoxy(MAP_PRINT_X + 2 * mapGoal[i][0], MAP_PRINT_Y + mapGoal[i][1]);
-					printf("O");
-				}
+				printf("%c", command);
+				gets(char_topNum);
+				topNum = atoi(char_topNum);
+				gotoxy(COMMAND_SCAN_X, COMMAND_SCAN_Y);
+				for (int i = 0; i < MAX_COMMAND; i++)	printf(" ");
 			}
+
+			switch (command)
+			{
+				//left
+			case 'h':	case 'H':
+				if (move(-1, 0, 0))	log[stage - 1][record[stage - 1] - 1] = 'h';
+				break;
+					
+				//down
+			case 'j':	case 'J':
+				if (move(0, 1, 0))	log[stage - 1][record[stage - 1] - 1] = 'j';
+				break;
+
+				//up
+			case 'k':	case 'K':
+				if (move(0, -1, 0))	log[stage - 1][record[stage - 1] - 1] = 'k';
+				break;
+
+				//right
+			case 'l':	case 'L':
+				if (move(1, 0, 0))	log[stage - 1][record[stage - 1] - 1] = 'l';
+				break;
+
+			case 'u':	case 'U':	//undo
+				if (remainUndo > 0 && record[stage - 1] > 0)
+				{
+					remainUndo--;
+					if (!printNewStage(stage))	return 0;
+					loadMove(record[stage - 1] - 1, 1);
+				}
+				else if(remainUndo <= 0)
+				{
+					//prompt
+					gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
+					printf("Undo 기회 모두사용함");
+				}
+				else if (record[stage - 1] <= 0)
+				{
+					gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
+					printf("Nothing to Undo");
+				}
+
+				break;
+
+			case 'r':	case 'R':	//replay 현재 맵을 다시시작 (움직임 횟수 유지)
+				if (!printNewStage(stage))	return 0;
+				break;
+
+			case 'n':	case 'N':	//new 1번째 맵부터 다시시작 (움직임 횟수 삭제)
+				for (int i = 0; i < STAGE_NUM; i++)	record[i] = 0;
+				stage = 1;
+				if (!printNewStage(stage))	return 0;
+				break;
+
+			case 'e':	case 'E':	//exit 게임 종료
+			case 's':	case 'S':	//save 현재 상태 저장
+
+				save = fopen("sokoban.txt", "w");
+
+				//Line 1: name stage remainUndo
+				//Line 2: Stage Records
+				//Line 3~: Stage Logs
+
+				fprintf(save, "%s %d %d\n", name, stage, remainUndo);
+				for (int i = 0; i < STAGE_NUM;i++)	fprintf(save, "%d ", record[i]);
+				for (int i = 0; i < STAGE_NUM; i++)
+				{
+					for (int j = 0; j < record[i]; j++)	fprintf(save, "%c", log[i][j]);
+					fprintf(save, "\n");
+				}
+
+				fclose(save);
+
+				gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
+				printf("저장완료");
+
+				if (command == 'e' || command == 'E')
+				{
+
+					gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y + 1);
+					printf("SEE YOU %s. . . . \n", name);
+					return 0;
+				}
+				break;
+
+			case 'f':	case 'F':	//save파일 시점부터 게임진행
+
+				save = fopen("sokoban.txt", "r");
+				//Line 1: name stage remainUndo
+				//Line 2: Stage Records
+				//Line 3~: Stage Logs
+
+				fscanf(save, "%s %d %d", name, &stage, &remainUndo);
+				for (int i = 0; i < STAGE_NUM; i++)	fscanf(save, "%d", &record[i]);
+				for (int i = 0; i < STAGE_NUM; i++)	fscanf(save, "%s", log[i]);
+				fclose(save);
+
+				printNewStage(stage);
+				loadMove(record[stage - 1], 1);
+
+				break;
+
+			case 'd':	case 'D':	//display help
+				if (disHelp == FALSE)
+				{
+					disHelp = TRUE;
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 0);	printf("%10s : 왼쪽", "h");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 1);	printf("%10s : 아래쪽", "j");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 2);	printf("%10s : 위쪽", "k");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 3);	printf("%10s : 오른쪽", "l");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 4);	printf("%10s : Undo (최대 5번)", "u");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 5);	printf("%10s : Replay 현재 맵을 처음부터 다시 시작 (움직임 횟수는 유지)", "r");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 6);	printf("%10s : New 첫번째 맵부터 다시 시작 (움직임 횟수 기록 삭제)", "n");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 7);	printf("%10s : Exit 저장 & 게임 종료", "e");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 8);	printf("%10s : Save 현재 상태 파일에 저장", "s");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 9);	printf("%10s : File Load 저장된 파일의 시점부터 다시 시작", "f");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 10);	printf("%10s : 명령 내용 보여줌", "d");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 11);	printf("%10s : 게임 순위 보여줌", "t");
+				}
+				else
+				{
+					disHelp = FALSE;
+					refresh(stage);
+				}
+
+				break;
+
+			case 't':	case 'T':	//top 게임 순위 보여줌
+				//do something
+
+				break;
+
+			default:
+				gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
+				printf("존재하지 않는 명령어입니다");
+				break;
+			}
+			statPrint();
 
 			//clear
 			gotoxy(COMMAND_SCAN_X, COMMAND_SCAN_Y);
-			for (int i = 0; i < strlen(commandArr); i++)	printf(" ");
+			for (int i = 0; i < MAX_COMMAND; i++)	printf(" ");
 			if (success(stage))	run = FALSE;
 		}
 		clear();
@@ -296,11 +339,12 @@ int main(void)
 void nameInput(void)
 {
 	printf("input name : ");
-	gets(name);
+	scanf("%s", name);
+	rewind(stdin);
 }
 void mapMaker(int stage)
 {
-	FILE* in;
+	FILE* in = NULL;
 	switch (stage)
 	{
 	case 1:
@@ -340,14 +384,11 @@ void mapMaker(int stage)
 		mapY = 8;
 
 		break;
-	default:
-		in = NULL;
-		break;
 	}
-
+	if (in != NULL)
 	for (int i = 0; i < mapY; i++)	fgets(map[i], MAX, in);
 
-	if(in != NULL)	fclose(in);
+	fclose(in);
 }
 int checkBoxStorage(void)
 {
@@ -377,8 +418,7 @@ int printNewStage(int stage)
 	clear();
 	gotoxy(HELLO_PRINT_X, HELLO_PRINT_Y);
 	printf("\tHello %s", name);
-	gotoxy(STATUS_PRINT_X, STATUS_PRINT_Y);
-	printf("Stage %d", stage);
+	statPrint();
 
 	mapMaker(stage);
 	if (!checkBoxStorage())
@@ -387,30 +427,37 @@ int printNewStage(int stage)
 		return 0;
 	}
 
-	mapPrinter();
 	playerFinder();
 	goalFinder();
+	mapPrinter();
 
 	gotoxy(COMMAND_PRINT_X, COMMAND_PRINT_Y);
 	printf("(Command) ");
-	statPrint();
 
 	return 1;
 }
-void printStage(int stage)
+void refresh(int stage)
 {
 	clear();
 	gotoxy(HELLO_PRINT_X, HELLO_PRINT_Y);
 	printf("\tHello %s", name);
-	gotoxy(STATUS_PRINT_X, STATUS_PRINT_Y);
-	printf("Stage %d", stage);
+	statPrint();
 
 	mapPrinter();
 
 	gotoxy(COMMAND_PRINT_X, COMMAND_PRINT_Y);
 	printf("(Command) ");
-
-	statPrint();
+}
+void goalPrinter(void)
+{
+	for (int i = 0; i < mapGoalCnt; i++)
+	{
+		if (map[mapGoal[i][1]][mapGoal[i][0]] != '@' && map[mapGoal[i][1]][mapGoal[i][0]] != '$')
+		{
+			gotoxy(MAP_PRINT_X + 2 * mapGoal[i][0], MAP_PRINT_Y + mapGoal[i][1]);
+			printf("O");
+		}
+	}
 }
 void mapPrinter(void)
 {
@@ -425,6 +472,7 @@ void mapPrinter(void)
 		}
 		printf("\n");
 	}
+	goalPrinter();
 }
 void playerFinder(void)
 {
@@ -443,6 +491,7 @@ void playerFinder(void)
 }
 void goalFinder(void)
 {
+	mapGoalCnt = 0;
 	for (int i = 0; i < mapX; i++)
 	{
 		for (int j = 0; j < mapY; j++)
@@ -456,57 +505,76 @@ void goalFinder(void)
 		}
 	}
 }
-void moveplayer(int xplus, int yplus)
+void moveplayer(int xplus, int yplus, int reload)
 {
-	gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-	printf(" ");
+	if (!reload)
+	{
+		gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+		printf(" ");
+	}
+	
 	map[playerY][playerX] = '.';
 	playerX += xplus;
 	playerY += yplus;
 
-	gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-	printf("@");
+	if (!reload)
+	{
+		gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+		printf("@");
+	}
+
 	map[playerY][playerX] = '@';
 
 	record[stage - 1]++;
 }
-void movePlayerBox(int xplus, int yplus)
+void movePlayerBox(int xplus, int yplus, int reload)
 {
-	gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-	printf(" ");
+	if (!reload)
+	{
+		gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+		printf(" ");
+	}
+
 	map[playerY][playerX] = '.';
 
 	playerX += xplus;
 	playerY += yplus;
 
-	gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
-	printf("@");
+	if (!reload)
+	{
+		gotoxy(PLAYER_PRINT_X, PLAYER_PRINT_Y);
+		printf("@");
+	}
+
 	map[playerY][playerX] = '@';
 
-	gotoxy(PLAYER_PRINT_X + 2 * xplus, PLAYER_PRINT_Y + yplus);
-	printf("$");
+	if (!reload)
+	{
+		gotoxy(PLAYER_PRINT_X + 2 * xplus, PLAYER_PRINT_Y + yplus);
+		printf("$");
+	}
 	map[playerY + yplus][playerX + xplus] = '$';
 
 	record[stage - 1]++;
 }
-int move(int xplus, int yplus)
+int move(int xplus, int yplus, int reload)
 {
 	int bef_playerX = playerX, bef_playerY = playerY;
 
 	if (playerX + xplus >= 0 && playerY + yplus >= 0 && playerX + xplus < mapX && playerY + yplus < mapY)
 	{
-		if (map[playerY + yplus][playerX + xplus] == '.')	moveplayer(xplus, yplus);
+		if (map[playerY + yplus][playerX + xplus] == '.')	moveplayer(xplus, yplus, reload);
 		else if (map[playerY + yplus][playerX + xplus] == '$' && map[playerY + 2 * yplus][playerX + 2 * xplus] == '.'
-			&& playerX + 2 * xplus >= 0 && playerY + 2 * yplus >= 0 && playerX + 2 * xplus < mapX && playerY + 2 * yplus < mapY)	movePlayerBox(xplus, yplus);
+			&& playerX + 2 * xplus >= 0 && playerY + 2 * yplus >= 0 && playerX + 2 * xplus < mapX && playerY + 2 * yplus < mapY)	movePlayerBox(xplus, yplus, reload);
 		else if (map[playerY + yplus][playerX + xplus] == '$' && map[playerY + 2 * yplus][playerX + 2 * xplus] == 'O'
-			&& playerX + 2 * xplus >= 0 && playerY + 2 * yplus >= 0 && playerX + 2 * xplus < mapX && playerY + 2 * yplus < mapY)	movePlayerBox(xplus, yplus);
-		else if (map[playerY + yplus][playerX + xplus] == 'O')	moveplayer(xplus, yplus);
+			&& playerX + 2 * xplus >= 0 && playerY + 2 * yplus >= 0 && playerX + 2 * xplus < mapX && playerY + 2 * yplus < mapY)	movePlayerBox(xplus, yplus, reload);
+		else if (map[playerY + yplus][playerX + xplus] == 'O')	moveplayer(xplus, yplus, reload);
 	}
 
 	if (bef_playerX != playerX || bef_playerY != playerY)	return 1;
 	else return 0;
 }
-void loadMove(int repeat)
+void loadMove(int repeat, int reload)
 {
 	record[stage - 1] = 0;
 	for (int i = 0; i < repeat; i++)
@@ -515,30 +583,30 @@ void loadMove(int repeat)
 		{
 			//left
 		case 'h':	case 'H':
-			move(-1, 0);
+			move(-1, 0, reload);
 			break;
 
 			//down
 		case 'j':	case 'J':
-			move(0, 1);
+			move(0, 1, reload);
 			break;
 
 			//up
 		case 'k':	case 'K':
-			move(0, -1);
+			move(0, -1, reload);
 			break;
 
 			//right
 		case 'l':	case 'L':
-			move(1, 0);
+			move(1, 0, reload);
 			break;
 		}
 	}
+	mapPrinter();
+	goalPrinter();
 }
 int success(int stage)
 {
-	//returns 1 when succeed
-	//else returns 0
 	int cnt = 0;
 	for (int i = 0; i < mapGoalCnt; i++)
 	{
@@ -547,6 +615,8 @@ int success(int stage)
 
 	if (cnt == mapGoalCnt)	return 1;
 	else return 0;
-
-	//do something
 }
+
+//구현해야 될사항
+//promptClear
+//top
