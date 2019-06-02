@@ -47,6 +47,37 @@
 #define getch() _getch()
 #define getche() _getche()
 #define gets(x) gets_s(x,sizeof(x))
+#elif __unix__
+#include <unistd.h>
+#include <termio.h>
+int getch(void)
+{
+	int c;
+	struct termios oldattr, newattr;
+	tcgetattr(STDIN_FILENO, &oldattr);           // 현재 터미널 설정 읽음
+	newattr = oldattr;
+	newattr.c_lflag &= ~(ICANON | ECHO);         // CANONICAL과 ECHO 끔
+	newattr.c_cc[VMIN] = 1;                      // 최소 입력 문자 수를 1로 설정
+	newattr.c_cc[VTIME] = 0;                     // 최소 읽기 대기 시간을 0으로 설정
+	tcsetattr(STDIN_FILENO, TCSANOW, &newattr);  // 터미널에 설정 입력
+	c = getchar();                               // 키보드 입력 읽음
+	tcsetattr(STDIN_FILENO, TCSANOW, &oldattr);  // 원래의 설정으로 복구
+	return c;
+}
+int getche(void)
+{
+	int c;
+	struct termios oldattr, newattr;
+	tcgetattr(STDIN_FILENO, &oldattr);           // 현재 터미널 설정 읽음
+	newattr = oldattr;
+	newattr.c_lflag &= ~(ICANON);				 // CANONICAL 끔
+	newattr.c_cc[VMIN] = 1;                      // 최소 입력 문자 수를 1로 설정
+	newattr.c_cc[VTIME] = 0;                     // 최소 읽기 대기 시간을 0으로 설정
+	tcsetattr(STDIN_FILENO, TCSANOW, &newattr);  // 터미널에 설정 입력
+	c = getchar();                               // 키보드 입력 읽음
+	tcsetattr(STDIN_FILENO, TCSANOW, &oldattr);  // 원래의 설정으로 복구
+	return c;
+}
 #elif __linux__
 #include <unistd.h>
 #include <termio.h>
@@ -80,10 +111,35 @@ int getche(void)
 }
 #endif
 
+void gotoxy(int x, int y)
+{
+	printf("\033[%dd\033[%dG", y, x + 1);
+}
+void clear(void)
+{
+#ifdef __unix__
+	system("clear");
+#elif __linux__
+	printf("\033[H\033[J");
+#elif _WIN32
+	printf("\033[H\033[J");
+#endif
+}
+void clearBuf(void)
+{
+#ifdef _WIN32
+	rewind(stdin);
+#elif __unix__
+	fpurge(stdin);
+#elif __linux__
+	fpurge(stdin);
+#endif
+}
+
 char name[STR_MAX];
 int record[STAGE_NUM];
 
-char log[STAGE_NUM][MAX_LOG];
+char logger[STAGE_NUM][MAX_LOG];
 
 int stage;
 int mapX, mapY;
@@ -100,7 +156,7 @@ char nameArr[MAX_RANK][STR_MAX];
 int remainUndo = UNDO_INIT;
 
 void nameInput(void);
-void mapMaker(int stage);
+int mapMaker(int stage);
 int checkBoxStorage(void);
 
 void statPrint(void);
@@ -123,14 +179,6 @@ void inputRank(void);
 void sort(int sortStage);
 void swapRankArrAdd(int a, int b);
 
-void gotoxy(int x, int y)
-{
-	printf("\033[%dd\033[%dG", y, x + 1);
-}
-void clear()
-{
-	printf("\033[H\033[J");
-}
 
 int main(void)
 {
@@ -139,7 +187,7 @@ int main(void)
 
 	printf("Start. . . .\n");
 	nameInput();
-	clear();
+	clearBuf();
 	
 	for(stage = 1;stage <= STAGE_NUM;stage++)
 	{
@@ -156,6 +204,8 @@ int main(void)
 			gotoxy(COMMAND_SCAN_X, COMMAND_SCAN_Y);
 
 			command = getche();
+			clearBuf();
+
 #ifdef _WIN32
 			//Arrow Control
 #define KEY_UP 72
@@ -182,6 +232,7 @@ int main(void)
 				}
 			}
 #endif
+
 			int topNum = 0;
 
 			char char_topNum[MAX_COMMAND] = { 0 };
@@ -194,27 +245,27 @@ int main(void)
 				gotoxy(COMMAND_SCAN_X, COMMAND_SCAN_Y);
 				for (int i = 0; i < MAX_COMMAND; i++)	printf(" ");
 			}
-
+			
 			switch (command)
 			{
 				//left
 			case 'h':	case 'H':
-				if (move(-1, 0, 0))	log[stage - 1][record[stage - 1] - 1] = 'h';
+				if (move(-1, 0, 0))	logger[stage - 1][record[stage - 1] - 1] = 'h';
 				break;
 					
 				//down
 			case 'j':	case 'J':
-				if (move(0, 1, 0))	log[stage - 1][record[stage - 1] - 1] = 'j';
+				if (move(0, 1, 0))	logger[stage - 1][record[stage - 1] - 1] = 'j';
 				break;
 
 				//up
 			case 'k':	case 'K':
-				if (move(0, -1, 0))	log[stage - 1][record[stage - 1] - 1] = 'k';
+				if (move(0, -1, 0))	logger[stage - 1][record[stage - 1] - 1] = 'k';
 				break;
 
 				//right
 			case 'l':	case 'L':
-				if (move(1, 0, 0))	log[stage - 1][record[stage - 1] - 1] = 'l';
+				if (move(1, 0, 0))	logger[stage - 1][record[stage - 1] - 1] = 'l';
 				break;
 
 			case 'u':	case 'U':	//undo
@@ -226,10 +277,8 @@ int main(void)
 				}
 				else if(remainUndo <= 0)
 				{
-					//prompt
-					
 					refresh(stage);gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
-					printf("Undo 기회 모두사용함");
+					printf("No more Undo Chance");
 				}
 				else if (record[stage - 1] <= 0)
 				{
@@ -262,14 +311,14 @@ int main(void)
 				for (int i = 0; i < STAGE_NUM;i++)	fprintf(save, "%d ", record[i]);
 				for (int i = 0; i < STAGE_NUM; i++)
 				{
-					for (int j = 0; j < record[i]; j++)	fprintf(save, "%c", log[i][j]);
+					for (int j = 0; j < record[i]; j++)	fprintf(save, "%c", logger[i][j]);
 					fprintf(save, "\n");
 				}
 
 				fclose(save);
 
 				refresh(stage);gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
-				printf("저장완료");
+				printf("Saved");
 
 				if (command == 'e' || command == 'E')
 				{
@@ -288,7 +337,7 @@ int main(void)
 
 				fscanf(save, "%s %d %d", name, &stage, &remainUndo);
 				for (int i = 0; i < STAGE_NUM; i++)	fscanf(save, "%d", &record[i]);
-				for (int i = 0; i < STAGE_NUM; i++)	fscanf(save, "%s", log[i]);
+				for (int i = 0; i < STAGE_NUM; i++)	fscanf(save, "%s", logger[i]);
 				fclose(save);
 					
 				printNewStage(stage);
@@ -301,7 +350,8 @@ int main(void)
 				{
 					disHelp = TRUE;
 					refresh(stage);
-					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 0);	printf("%10s : 왼쪽", "h");
+
+					/*gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 0);	printf("%10s : 왼쪽", "h");
 					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 1);	printf("%10s : 아래쪽", "j");
 					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 2);	printf("%10s : 위쪽", "k");
 					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 3);	printf("%10s : 오른쪽", "l");
@@ -312,7 +362,20 @@ int main(void)
 					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 8);	printf("%10s : Save 현재 상태 파일에 저장", "s");
 					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 9);	printf("%10s : File Load 저장된 파일의 시점부터 다시 시작", "f");
 					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 10);	printf("%10s : 명령 내용 보여줌", "d");
-					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 11);	printf("%10s : 게임 순위 보여줌", "t");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 11);	printf("%10s : 게임 순위 보여줌", "t");*/
+
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 0);	printf("%10s : left", "h");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 1);	printf("%10s : down", "j");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 2);	printf("%10s : up", "k");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 3);	printf("%10s : right", "l");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 4);	printf("%10s : Undo", "u");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 5);	printf("%10s : Replay", "r");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 6);	printf("%10s : New", "n");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 7);	printf("%10s : Exit", "e");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 8);	printf("%10s : Save", "s");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 9);	printf("%10s : File Load", "f");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 10);	printf("%10s : Display Help", "d");
+					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 11);	printf("%10s : Top Rank", "t");
 				}
 				else
 				{
@@ -328,7 +391,7 @@ int main(void)
 				if (rank == NULL)
 				{
 					refresh(stage);gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
-					printf("rank.txt가 존재하지 않습니다");
+					printf("rank.txt not found");
 				}
 				int sum = 0;
 				while (!feof(rank))
@@ -348,19 +411,19 @@ int main(void)
 				{
 					sort(topNum);
 					refresh(stage);gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
-					for (int i = 0; i < rankCnt; i++)	printf("%3d %10s %5d점\n", i + 1, nameArr[i], rankArr[i][topNum]);
+					for (int i = 0; i < rankCnt; i++)	printf("%3d %10s %5dpoint\n", i + 1, nameArr[i], rankArr[i][topNum]);
 				}
 				else
 				{
 					refresh(stage);gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
-					printf("존재하지 않는 STAGE입니다.");
+					printf("STAGE unavailable");
 				}
 
 				break;
 
 			default:
 				refresh(stage);gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
-				printf("존재하지 않는 명령어입니다");
+				printf("Command unavailable");
 				break;
 			}
 			statPrint();
@@ -382,53 +445,33 @@ void nameInput(void)
 	scanf("%s", name);
 	rewind(stdin);
 }
-void mapMaker(int stage)
+int mapMaker(int stage)
 {
 	FILE* in = NULL;
-	switch (stage)
-	{
-	case 1:
-		in = fopen("map1.txt", "r");
+	char tmpStr[STR_MAX] = { 0 };
+	sprintf(tmpStr, "map%d.txt", stage);
+	in = fopen(tmpStr, "r");
 
-		mapX = 22;
-		mapY = 11;
-
-		break;
-
-	case 2:
-		in = fopen("map2.txt", "r");
-
-		mapX = 14;
-		mapY = 10;
-
-		break;
-
-	case 3:
-		in = fopen("map3.txt", "r");
-
-		mapX = 17;
-		mapY = 10;
-
-		break;
-	case 4:
-		in = fopen("map4.txt", "r");
-
-		mapX = 13;
-		mapY = 11;
-
-		break;
-	case 5:
-		in = fopen("map5.txt", "r");
-
-		mapX = 8;
-		mapY = 8;
-
-		break;
-	}
 	if (in != NULL)
-	for (int i = 0; i < mapY; i++)	fgets(map[i], MAX, in);
-
-	fclose(in);
+	{
+		mapX = 0;
+		mapY = 0;
+		while (!feof(in))
+		{
+			fgets(map[mapY], MAX, in);
+			if(map[mapY][strlen(map[mapY]) - 1] == '\n')	map[mapY][strlen(map[mapY]) - 1] = '\0';
+			mapY++;
+		}
+		mapX = strlen(map[0]);
+		fclose(in);
+		return 1;
+	}
+	else
+	{
+		printf("FILE LOAD FAIL! \nFILE NAME SHOuLD BE map""NUM"".txt\n");
+		printf("TERMINATING PROGRAM\n");
+		return 0;
+	}
 }
 int checkBoxStorage(void)
 {
@@ -456,14 +499,14 @@ void statPrint(void)
 int printNewStage(int stage)
 {
 	clear();
+	if (!mapMaker(stage))	return 0;
 	gotoxy(HELLO_PRINT_X, HELLO_PRINT_Y);
 	printf("\tHello %s", name);
 	statPrint();
 
-	mapMaker(stage);
 	if (!checkBoxStorage())
 	{
-		printf("\n\n박스와 보관장소 개수가 다릅니다. 프로그램을 종료합니다.\n");
+		printf("\n\nbox and goal num diff. Terminating Program\n");
 		return 0;
 	}
 
@@ -619,7 +662,7 @@ void loadMove(int repeat, int reload)
 	record[stage - 1] = 0;
 	for (int i = 0; i < repeat; i++)
 	{
-		switch (log[stage - 1][i])
+		switch (logger[stage - 1][i])
 		{
 			//left
 		case 'h':	case 'H':
