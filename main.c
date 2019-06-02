@@ -11,7 +11,7 @@
 #define STAGE_NUM 5
 #define MAX_LOG 1000
 
-#define UNDO_INIT 99999
+#define UNDO_INIT 5
 
 #define TRUE 1
 #define FALSE 0
@@ -155,7 +155,7 @@ int main(void)
 			goalPrinter();
 			gotoxy(COMMAND_SCAN_X, COMMAND_SCAN_Y);
 
-			command = getch();
+			command = getche();
 #ifdef _WIN32
 			//Arrow Control
 #define KEY_UP 72
@@ -183,16 +183,17 @@ int main(void)
 			}
 #endif
 			int topNum = 0;
+
 			char char_topNum[MAX_COMMAND] = { 0 };
 			if (command == 't' || command == 'T')
 			{
-				printf("%c", command);
+				//printf("%c", command);
 				gets(char_topNum);
 				topNum = atoi(char_topNum);
+
 				gotoxy(COMMAND_SCAN_X, COMMAND_SCAN_Y);
 				for (int i = 0; i < MAX_COMMAND; i++)	printf(" ");
 			}
-
 
 			switch (command)
 			{
@@ -364,9 +365,6 @@ int main(void)
 			}
 			statPrint();
 
-			//clear
-			//gotoxy(COMMAND_SCAN_X, COMMAND_SCAN_Y);
-			//for (int i = 0; i < MAX_COMMAND; i++)	printf(" ");
 			if (success(stage))	run = FALSE;
 		}
 		clear();
@@ -698,6 +696,3 @@ void swapRankArrAdd(int a, int b)
 		strcpy(nameArr[b], tmpname);
 	}
 }
-//구현해야 될사항
-//promptClear
-//top
