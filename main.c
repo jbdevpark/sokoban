@@ -192,6 +192,7 @@ int main(void)
 	for(stage = 1;stage <= STAGE_NUM;stage++)
 	{
 		if (!printNewStage(stage))	return 0;
+		refresh(stage);
 
 		char run = TRUE;
 		char disHelp = FALSE;
@@ -449,6 +450,7 @@ int mapMaker(int stage)
 {
 	FILE* in = NULL;
 	char tmpStr[STR_MAX] = { 0 };
+
 	sprintf(tmpStr, "map%d.txt", stage);
 	in = fopen(tmpStr, "r");
 
@@ -463,6 +465,10 @@ int mapMaker(int stage)
 			mapY++;
 		}
 		mapX = strlen(map[0]);
+#ifdef __unix__
+		mapX--;
+#endif
+
 		fclose(in);
 		return 1;
 	}
@@ -473,6 +479,7 @@ int mapMaker(int stage)
 		return 0;
 	}
 }
+
 int checkBoxStorage(void)
 {
 	int cntBox = 0, cntStorage = 0;
