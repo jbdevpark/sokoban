@@ -6,7 +6,8 @@
 
 #define MAX 30
 #define MAX_COMMAND 10
-#define STR_MAX 100
+#define MAX_RANK 100
+#define STR_MAX 10
 #define STAGE_NUM 5
 #define MAX_LOG 1000
 
@@ -87,9 +88,14 @@ char log[STAGE_NUM][MAX_LOG];
 int stage;
 int mapX, mapY;
 int playerX, playerY;
+
 char map[MAX][MAX];
 char mapGoal[MAX][2];
 int mapGoalCnt = 0;
+
+int rankArr[MAX_RANK][STAGE_NUM + 1] = { 0 };
+int rankCnt;
+char nameArr[MAX_RANK][STR_MAX];
 
 int remainUndo = UNDO_INIT;
 
@@ -113,6 +119,10 @@ void loadMove(int repeat, int reload);
 
 int success(int stage);
 
+void inputRank(void);
+void sort(int sortStage);
+void swapRankArrAdd(int a, int b);
+
 void gotoxy(int x, int y)
 {
 	printf("\033[%dd\033[%dG", y, x + 1);
@@ -126,7 +136,7 @@ int main(void)
 {
 	FILE* save;
 	FILE* rank;
-	//clear();
+
 	printf("Start. . . .\n");
 	nameInput();
 	clear();
@@ -140,11 +150,9 @@ int main(void)
 
 		while (run)
 		{
-			//char commandArr[STR_MAX] = { 0 };
 			int command;
 
 			goalPrinter();
-
 			gotoxy(COMMAND_SCAN_X, COMMAND_SCAN_Y);
 
 			command = getch();
@@ -185,6 +193,7 @@ int main(void)
 				for (int i = 0; i < MAX_COMMAND; i++)	printf(" ");
 			}
 
+
 			switch (command)
 			{
 				//left
@@ -217,12 +226,13 @@ int main(void)
 				else if(remainUndo <= 0)
 				{
 					//prompt
-					gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
+					
+					refresh(stage);gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
 					printf("Undo 기회 모두사용함");
 				}
 				else if (record[stage - 1] <= 0)
 				{
-					gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
+					refresh(stage);gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
 					printf("Nothing to Undo");
 				}
 
@@ -257,12 +267,11 @@ int main(void)
 
 				fclose(save);
 
-				gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
+				refresh(stage);gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
 				printf("저장완료");
 
 				if (command == 'e' || command == 'E')
 				{
-
 					gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y + 1);
 					printf("SEE YOU %s. . . . \n", name);
 					return 0;
@@ -280,7 +289,7 @@ int main(void)
 				for (int i = 0; i < STAGE_NUM; i++)	fscanf(save, "%d", &record[i]);
 				for (int i = 0; i < STAGE_NUM; i++)	fscanf(save, "%s", log[i]);
 				fclose(save);
-
+					
 				printNewStage(stage);
 				loadMove(record[stage - 1], 1);
 
@@ -290,6 +299,7 @@ int main(void)
 				if (disHelp == FALSE)
 				{
 					disHelp = TRUE;
+					refresh(stage);
 					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 0);	printf("%10s : 왼쪽", "h");
 					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 1);	printf("%10s : 아래쪽", "j");
 					gotoxy(DISHELP_PRINT_X, DISHELP_PRINT_Y + 2);	printf("%10s : 위쪽", "k");
@@ -308,28 +318,60 @@ int main(void)
 					disHelp = FALSE;
 					refresh(stage);
 				}
-
 				break;
 
 			case 't':	case 'T':	//top 게임 순위 보여줌
 				//do something
+				rankCnt = 0;
+				rank = fopen("rank.txt", "r");
+				if (rank == NULL)
+				{
+					refresh(stage);gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
+					printf("rank.txt가 존재하지 않습니다");
+				}
+				int sum = 0;
+				while (!feof(rank))
+				{
+					sum = 0;
+					fscanf(rank, "%s", nameArr[rankCnt]);
+					for (int i = 1; i <= STAGE_NUM; i++)
+					{
+						fscanf(rank, "%d", &rankArr[rankCnt][i]);
+						sum += rankArr[rankCnt][i];
+					}
+					rankArr[rankCnt++][0] = sum;
+					if (sum == 0)	rankCnt--;
+				}
+
+				if (0 <= topNum && topNum <= STAGE_NUM)
+				{
+					sort(topNum);
+					refresh(stage);gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
+					for (int i = 0; i < rankCnt; i++)	printf("%3d %10s %5d점\n", i + 1, nameArr[i], rankArr[i][topNum]);
+				}
+				else
+				{
+					refresh(stage);gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
+					printf("존재하지 않는 STAGE입니다.");
+				}
 
 				break;
 
 			default:
-				gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
+				refresh(stage);gotoxy(PROMPT_PRINT_X, PROMPT_PRINT_Y);
 				printf("존재하지 않는 명령어입니다");
 				break;
 			}
 			statPrint();
 
 			//clear
-			gotoxy(COMMAND_SCAN_X, COMMAND_SCAN_Y);
-			for (int i = 0; i < MAX_COMMAND; i++)	printf(" ");
+			//gotoxy(COMMAND_SCAN_X, COMMAND_SCAN_Y);
+			//for (int i = 0; i < MAX_COMMAND; i++)	printf(" ");
 			if (success(stage))	run = FALSE;
 		}
 		clear();
 	}
+	inputRank();
 
 	printf("SEE YOU %s. . . . \n", name);
 	
@@ -616,7 +658,46 @@ int success(int stage)
 	if (cnt == mapGoalCnt)	return 1;
 	else return 0;
 }
+void inputRank(void)
+{
+	FILE* rank = fopen("rank.txt", "a");
+	fprintf(rank, "%s ", name);
 
+	for (int i = 0; i < STAGE_NUM; i++)	printf("%d ", record[i]);
+	printf("\n");
+
+	fclose(rank);
+}
+void sort(int sortStage)
+{
+	int maxAdd = 0;
+
+	for (int i = 0; i < rankCnt; i++)
+	{	
+		maxAdd = i;
+		for (int j = i; j < rankCnt; j++)
+		{
+			if (rankArr[maxAdd][sortStage] < rankArr[j][sortStage])	maxAdd = j;
+		}
+		swapRankArrAdd(i, maxAdd);
+	}
+}
+void swapRankArrAdd(int a, int b)
+{
+	int temp[STAGE_NUM + 1];
+	char tmpname[STR_MAX];
+	
+	for (int i = 0; i < STAGE_NUM + 1; i++)
+	{
+		temp[i] = rankArr[a][i];
+		rankArr[a][i] = rankArr[b][i];
+		rankArr[b][i] = temp[i];
+
+		strcpy(tmpname, nameArr[a]);
+		strcpy(nameArr[a], nameArr[b]);
+		strcpy(nameArr[b], tmpname);
+	}
+}
 //구현해야 될사항
 //promptClear
 //top
